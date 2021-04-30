@@ -5,11 +5,12 @@ namespace SwooleSidecar\Controllers;
 
 use SwooleSidecar\Concern\Singleton;
 use SwooleSidecar\Config\Config;
+use SwooleSidecar\Contract\ControllerContract;
 use SwooleSidecar\EurekaClient\EurekaClient;
 use SwooleSidecar\Helper\Helper;
 use Swoole\Http\Request;
 
-class ProxyController
+class ProxyController implements ControllerContract
 {
     use Singleton;
     /**
