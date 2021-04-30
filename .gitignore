@@ -1,0 +1,6 @@
+vendor
+docker-compose.yml
+run.sh
+.idea
+*.lock
+.DS_Store
