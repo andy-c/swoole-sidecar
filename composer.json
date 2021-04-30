@@ -1,0 +1,36 @@
+{
+    "name": "swoole-sidecar/swoole-sidecar",
+    "description": "The swoole sidecar for php project",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "andy chen",
+            "email": "cylbdda@163.com"
+        }
+    ],
+    "repositories":{
+        "packagist": {
+            "type": "composer",
+            "url": "https://mirrors.aliyun.com/composer"
+        }
+    },
+    "minimum-stability": "dev",
+    "require": {
+        "php": ">=7.0",
+        "monolog/monolog": "^1.25",
+        "ext-swoole": "*",
+        "ext-json": "*",
+        "nikic/fast-route": "v1.3.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "SwooleSidecar\\": "src/",
+            "SwooleSidecarTest\\": "test/"
+        }
+    },
+    "prefer-stable": true,
+    "require-dev": {
+        "phpunit/phpunit": "^7.5"
+    }
+}
