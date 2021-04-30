@@ -49,8 +49,6 @@ class AppServer
             $this->parseCommand();
             //register shutdown function
             $this->handleShutdownFunction();
-            //displayui
-            $this->displayUI();
             //init http server
             $this->initHttpServer();
             //init eureka and apollo
