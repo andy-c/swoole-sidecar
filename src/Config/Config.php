@@ -33,7 +33,7 @@ class  Config
      */
     public static function apollo():array {
         return [
-            "host" => env("APOLLO__HOST",'apollo-api.dev.chinawayltd.com'),
+            "host" => env("APOLLO__HOST",'apollo.com'),
             'port' => env('APOLLO__PORT','8080'),
             'clusterName' => env('APOLLO__CLUSTER','default'),
             'appId' => env('APOLLO__ID','swoole-sidecar'),
