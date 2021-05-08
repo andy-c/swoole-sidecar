@@ -14,7 +14,6 @@ use SwooleSidecar\Logger\Logger;
 use SwooleSidecar\Request\Request;
 use Throwable;
 use Swoole\Process;
-use Swoole\Coroutine\WaitGroup;
 
 /**
  * sidecar
