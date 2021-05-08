@@ -18,6 +18,11 @@ class  Config
            return false;
        }
        $config = apcu_fetch($name);
+       if(!$config){
+           $cacheFile = file_get_contents(APOLLO_DIR.'/swoole-sidecar_'.self::apollo()['clusterName'].'_apollo_cache_'.$name.'.json');
+           $config = json_decode($cacheFile,true);
+           apcu_store($name,$config);
+       }
        return $config ?? [];
     }
 

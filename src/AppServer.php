@@ -115,6 +115,8 @@ class AppServer
             case 'start':
                 if ($command2 === '-d') {
                     $this->serconf['daemonize']= true;
+                }else{
+                    $this->serconf['daemonize']=false;
                 }
                 break;
             case 'stop':
@@ -127,7 +129,7 @@ class AppServer
                 exit;
             case 'restart':
                 self::stopServer($masterPid);
-                $this->serconf->daemonize = true;
+                $this->serconf['daemonize'] = true;
                 break;
             default:
         }
@@ -177,7 +179,7 @@ class AppServer
            'enable_coroutine' => $this->serconf['enable_coroutine'],
            'hook_flags'       => $this->serconf['hook_flags'],
            'max_coroutine'    => $this->serconf['max_coroutine'],
-           'daemonize'        => $this->serconf['daemonize'],
+           'daemonize'        => $this->serconf['daemonize'] == 'false',
            'backlog'          => $this->serconf['backlog']
        ]);
        $httpEvent = SwooleHttpEvent::once();
@@ -240,16 +242,20 @@ class AppServer
      * @return void
     */
     private function pullConfig():void {
-      \co\run(function(){
-          go(function()  {
-              $apollo = ApolloClient::once();
-              $apollo->request = Request::once();
-              $apollo->conf = Config::apollo();
-              $apollo->fetchConfig(explode(',',$apollo->conf['namespaces']));
-              $this->serconf = apcu_fetch('server');
-              //for main process ,we dont need this
-              $apollo = null;
-          });
-      });
+        if(!is_dir(APOLLO_DIR)){
+            \co\run(function(){
+                go(function()  {
+                    $apollo = ApolloClient::once();
+                    $apollo->request = Request::once();
+                    $apollo->conf = Config::apollo();
+                    $apollo->fetchConfig(explode(',',$apollo->conf['namespaces']));
+                    $this->serconf = apcu_fetch('server');
+                    //for main process ,we dont need this
+                    $apollo = null;
+                });
+            });
+        }else{
+            $this->serconf = Config::get('server');
+        }
     }
 }
