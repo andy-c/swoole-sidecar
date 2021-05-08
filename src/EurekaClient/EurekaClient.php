@@ -293,7 +293,7 @@ class EurekaClient implements RegisterCenterInterface
      *
      * @return array
     */
-    private function instanceInfo(){
+    public function instanceInfo(){
         return [
             'instanceId' => $this->conf['hostName'].':'.APP_NAME.':'.$this->conf['port'],
             'hostName' =>$this->conf['hostName'] ?? swoole_get_local_ip(),
@@ -325,9 +325,9 @@ class EurekaClient implements RegisterCenterInterface
             'metadata'=>[
                 '@class' =>''
             ],
-            'homePageUrl' => $this->conf['ipAddr'].'/'.$this->conf['homePageUrl'],
-            'statusPageUrl'=>$this->conf['ipAddr'].'/'.$this->conf['statusPageUrl'],
-            'healthCheckUrl'=>$this->conf['ipAddr'].'/'.$this->conf['healthCheckUrl'],
+            'homePageUrl'    => 'http://'. $this->conf['ipAddr'].':'.$this->conf['port'].'/'.$this->conf['homePageUrl'],
+            'statusPageUrl'  => 'http://'. $this->conf['ipAddr'].':'.$this->conf['port'].'/'.$this->conf['statusPageUrl'],
+            'healthCheckUrl' => 'http://'. $this->conf['ipAddr'].':'.$this->conf['port'].'/'.$this->conf['healthCheckUrl'],
             'vipAddress' =>$this->conf['vipAddress'],
             'secureVipAddress'=>$this->conf['secureVipAddress'],
             'isCoordinatingDiscoveryServer' => $this->conf['isCoordinatingDiscoveryServer'],

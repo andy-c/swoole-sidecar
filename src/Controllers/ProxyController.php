@@ -53,8 +53,8 @@ class ProxyController implements ControllerContract
      * @return string
     */
     public function info(Request $request,Response $response):string {
-        $data = Config::once()->getEurekaConfig()->getInstance();
-        $data['leaseInfo']['lastRenewalTimestamp'] = apcu_fetch(EurekaClient::once()::LAST_RENEW_TIME);
+        $data = EurekaClient::once()->instanceInfo();
+        $data['leaseInfo']['lastRenewalTimestamp'] = apcu_fetch(EurekaClient::LAST_RENEW_TIME);
         return flushJson($response,$data);
     }
 }

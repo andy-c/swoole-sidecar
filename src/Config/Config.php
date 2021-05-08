@@ -4,6 +4,7 @@
 namespace SwooleSidecar\Config;
 
 use function apcu_fetch;
+use function apcu_store;
 
 class  Config
 {
