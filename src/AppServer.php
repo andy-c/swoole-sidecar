@@ -6,12 +6,15 @@ namespace SwooleSidecar;
 use Swoole\Http\Server;
 use SwooleSidecar\ApolloClient\ApolloClient;
 use SwooleSidecar\Concern\Singleton;
+use SwooleSidecar\Config\Config;
 use SwooleSidecar\Config\ServerConfig;
 use SwooleSidecar\EurekaClient\EurekaClient;
 use SwooleSidecar\Event\SwooleEvent\SwooleHttpEvent;
-use SwooleSidecar\Helper\Helper;
+use SwooleSidecar\Logger\Logger;
+use SwooleSidecar\Request\Request;
 use Throwable;
 use Swoole\Process;
+use Swoole\Coroutine\WaitGroup;
 
 /**
  * sidecar
@@ -23,13 +26,14 @@ class AppServer
      * @version
      * @var float
     */
-    const VERSION=1.0;
+    const VERSION=1.1;
 
     /**
      * server object
      * @var \swoole_http_server
     */
     private $httpServer;
+
     /**
      * server config
      * @var ServerConfig
@@ -39,12 +43,13 @@ class AppServer
     /**
      * _construct
     */
-    public function __construct(ServerConfig $serconf)
+    public function __construct()
     {
         try{
-            $this->serconf = $serconf;
             //check server status
             $this->checkEnv();
+            //pull config from apollo
+            $this->pullConfig();
             //parse command
             $this->parseCommand();
             //register shutdown function
@@ -54,7 +59,7 @@ class AppServer
             //init eureka and apollo
             $this->initAppClient();
         }catch (Throwable $ex){
-            Helper::getLogger()->error("server error :".$ex->getMessage());
+            error_log("server error :".$ex->getMessage());
         }
     }
 
@@ -110,7 +115,7 @@ class AppServer
         switch ($command) {
             case 'start':
                 if ($command2 === '-d') {
-                    $this->serconf->daemonize= true;
+                    $this->serconf['daemonize']= true;
                 }
                 break;
             case 'stop':
@@ -137,7 +142,7 @@ class AppServer
     private function stopServer($masterPid):void{
         if(empty($masterPid)) return;
         @unlink(PID_FILE);
-        Helper::getLogger()->info("server is stopping");
+        Logger::once()->info("server is stopping");
         $masterPid && Process::kill($masterPid,SIGTERM);
         $timeout=10;
         $startTime = time();
@@ -145,13 +150,13 @@ class AppServer
             $serverRunning = $masterPid && Process::kill($masterPid,0);
             if($serverRunning){
                 if(time() - $startTime >= $timeout){
-                    Helper::getLogger()->info("server can't be stopped");
+                    Logger::once()->info("server can't be stopped");
                     exit;
                 }
                 usleep(10000);
                 continue;
             }
-            Helper::getLogger()->info("server has been stopped");
+            Logger::once()->info("server has been stopped");
             break;
         }
     }
@@ -162,19 +167,19 @@ class AppServer
      * @return void
     */
     private  function initHttpServer():void{
-       $this->httpServer = new Server($this->serconf->host,$this->serconf->port);
+       $this->httpServer = new Server($this->serconf['host'],$this->serconf['port']);
        $this->httpServer->set([
-           'worker_num'       => $this->serconf->worker_num,
-           'task_worker_num'  => $this->serconf->task_worker_num,
-           'reactor_num'      => $this->serconf->reactor_num,
-           'dispatch_mode'    => $this->serconf->dispatch_node,
-           'log_file'         => $this->serconf->log_file,
-           'max_request'      => $this->serconf->max_request,
-           'enable_coroutine' => $this->serconf->enable_coroutine,
-           'hook_flags'       => $this->serconf->hook_flags,
-           'max_coroutine'    => $this->serconf->max_coroutine,
-           'daemonize'        => $this->serconf->daemonize,
-           'backlog'          => $this->serconf->backlog
+           'worker_num'       => $this->serconf['worker_num'],
+           'task_worker_num'  => $this->serconf['task_worker_num'],
+           'reactor_num'      => $this->serconf['reactor_num'],
+           'dispatch_mode'    => $this->serconf['dispatch_mode'],
+           'log_file'         => SWOOLE_LOG,
+           'max_request'      => $this->serconf['max_request'],
+           'enable_coroutine' => $this->serconf['enable_coroutine'],
+           'hook_flags'       => $this->serconf['hook_flags'],
+           'max_coroutine'    => $this->serconf['max_coroutine'],
+           'daemonize'        => $this->serconf['daemonize'],
+           'backlog'          => $this->serconf['backlog']
        ]);
        $httpEvent = SwooleHttpEvent::once();
        $this->httpServer->on("request",[$httpEvent,"onRequest"]);
@@ -215,7 +220,7 @@ class AppServer
                 $file = $errors['file'];
                 $line = $errors['line'];
                 $errMsg = "worker process error :".$errors["type"].":".$mess."in ".$file."on the ".$line;
-                Helper::getLogger()->error($errMsg);
+                Logger::once()->error($errMsg);
             }
         });
     }
@@ -226,5 +231,26 @@ class AppServer
     */
     public function run():void{
         $this->httpServer->start();
+    }
+
+    /**
+     * firstly we can pull the config from apollo server
+     * then we can use that config,for example http server config,
+     * eureka config,log config ,and so on
+     *
+     * @return void
+    */
+    private function pullConfig():void {
+      \co\run(function(){
+          go(function()  {
+              $apollo = ApolloClient::once();
+              $apollo->request = Request::once();
+              $apollo->conf = Config::apollo();
+              $apollo->fetchConfig(explode(',',$apollo->conf['namespaces']));
+              $this->serconf = apcu_fetch('server');
+              //for main process ,we dont need this
+              $apollo = null;
+          });
+      });
     }
 }

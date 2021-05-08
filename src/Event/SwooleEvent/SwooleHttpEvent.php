@@ -7,9 +7,9 @@ use FastRoute\Dispatcher\GroupCountBased;
 use SwooleSidecar\Concern\Singleton;
 use SwooleSidecar\Dispatcher\Dispatcher;
 use SwooleSidecar\EurekaClient\EurekaClient;
-use SwooleSidecar\Helper\Helper;
 use Swoole\Http\Request;
 use Swoole\Http\Response;
+use SwooleSidecar\Logger\Logger;
 use SwooleSidecar\Route\Route;
 
 /**
@@ -62,7 +62,7 @@ class SwooleHttpEvent extends SwooleEvent
                     break;
                 }
                 if($i > 30){
-                    Helper::getLogger()->info("eureka deregister failed,pls check the network");
+                    Logger::once()->info("eureka deregister failed,pls check the network");
                     break;
                 }
                 $i++;

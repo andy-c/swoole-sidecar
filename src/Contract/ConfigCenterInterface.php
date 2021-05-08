@@ -9,19 +9,6 @@ use SwooleSidecar\Response\Response;
 
 interface ConfigCenterInterface
 {
-
-    /**
-     * pull with cache
-     *
-     * @param string $namespace
-     * @param string $clientip
-     *
-     * @return array
-     * @throws ApolloException
-     */
-    public function pullWithCache(string $namespace,string $clientip):Response;
-
-
     /**
      * pull without cache
      *
@@ -32,7 +19,7 @@ interface ConfigCenterInterface
      * @return array
      * @throws ApolloException
      */
-    public function pullWithOutCache(string $namespace,string $releaseKey = '',string $clientip):Response;
+    public function pullWithCacheOrNot(string $namespace,string $releaseKey = ''):Response;
 
     /**
      * pull batch
@@ -43,7 +30,7 @@ interface ConfigCenterInterface
      * @return array
      * @throws ApolloException
      */
-    public function pullBatch(array $namespaces,string $clientip):array;
+    public function pullBatch(array $namespaces):array;
 
     /**
      * listen

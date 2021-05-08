@@ -8,8 +8,8 @@ use Swoole\Coroutine\WaitGroup;
 use SwooleSidecar\Concern\Singleton;
 use SwooleSidecar\Exception\RequestException;
 use SwooleSidecar\Concern\RequestTrait;
+use SwooleSidecar\Logger\Logger;
 use SwooleSidecar\Response\Response;
-use SwooleSidecar\Helper\Helper;
 use function socket_strerror;
 
 class Request
@@ -56,7 +56,7 @@ class Request
                 );
             }
         } catch (RequestException $e) {
-            Helper::getLogger()->error(sprintf('request (%s)  fail!(%s)', $uri, $e->getMessage()));
+            Logger::once()->error(sprintf('request (%s)  fail!(%s)', $uri, $e->getMessage()));
         }
         return  new Response($status,$body,$cookie,$header);
     }
@@ -77,7 +77,7 @@ class Request
                     $response = $req();
                     $result[] = $response;
                 } catch (RequestException $ex) {
-                    Helper::getLogger()->error("batch request error is ".$ex->getMessage().' request info is '.json_encode($req));
+                    Logger::once()->error("batch request error is ".$ex->getMessage().' request info is '.json_encode($req));
                     $result[] = false;
                 }
                 $wg->done();

@@ -2,7 +2,8 @@
  
 ## 简介
 
-swoole-sidecar 是一款基于swoole 实现的sidecar模型，继承了swoole协程的高性能特征,默认采用守护进程的方式
+swoole-sidecar 是一款基于swoole 实现的sidecar模型，继承了swoole协程的高性能特征,默认采用守护进程的方式,
+版本升级为1.1,更新配置全部从配置中心获取
 
 
 ## 功能

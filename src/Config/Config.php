@@ -3,76 +3,37 @@
 
 namespace SwooleSidecar\Config;
 
+use function apcu_fetch;
 
-use SwooleSidecar\Concern\Singleton;
-use SwooleSidecar\Exception\ClassNotFoundException;
-use function spl_object_hash;
-
-class Config
+class  Config
 {
-    use Singleton;
 
     /**
-     * base config path
-     * @var string
-    */
-     private $base_config_path = 'SwooleSidecar\Config\\';
-
-     /**
-      * config ext
-      * @var string
+     * get config from cache
+     * @param string $name
+     * @return mixed
      */
-     private $confExt= 'Config';
-
-    /**
-     * global config class
-     * @var array
-    */
-    private  $configClassArray = [];
-
-    public  function get($config) {
-       if(empty($config)){
-           return;
+    public static function get(string $name=''){
+       if(empty($name)){
+           return false;
        }
-
-       if(isset($this->configClassArray[$config])){
-           return $this->configClassArray[$config];
-       }
-       //find the config
-       $class =  $this->base_config_path.ucfirst($config).$this->confExt;
-       if(class_exists($class)){
-           $this->configClassArray[$config] = new $class();
-       }else{
-           throw new ClassNotFoundException($config."config not exist");
-       }
-
-       return $this->configClassArray[$config];
+       $config = apcu_fetch($name);
+       return $config ?? [];
     }
 
     /**
-     * @return ServerConfig
-    */
-    public  function getServerConfig(){
-       return $this->get('server');
-    }
-    /**
-     * @return ApolloConfig
-    */
-    public  function getApolloConfig(){
-        return $this->get('apollo');
-    }
-
-    /**
-     * @return EurekaConfig
-    */
-    public  function getEurekaConfig(){
-        return $this->get('eureka');
+     * get apollo config
+     * @return array
+     */
+    public static function apollo():array {
+        return [
+            "host" => env("APOLLO__HOST",'apollo-api.dev.chinawayltd.com'),
+            'port' => env('APOLLO__PORT','8080'),
+            'clusterName' => env('APOLLO__CLUSTER','default'),
+            'appId' => env('APOLLO__ID','swoole-sidecar'),
+            'namespaces' => env('APOLLO__NAMESPACES','server,eureka,log')
+        ];
     }
 
-    /**
-     * @return LogConfig
-    */
-    public function getLogConfig(){
-        return $this->get('log');
-    }
+
 }

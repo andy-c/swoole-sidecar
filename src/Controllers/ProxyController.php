@@ -7,8 +7,11 @@ use SwooleSidecar\Concern\Singleton;
 use SwooleSidecar\Config\Config;
 use SwooleSidecar\Contract\ControllerContract;
 use SwooleSidecar\EurekaClient\EurekaClient;
-use SwooleSidecar\Helper\Helper;
-use Swoole\Http\Request;
+use Swoole\Http\{
+    Response,
+    Request
+};
+
 
 class ProxyController implements ControllerContract
 {
@@ -21,7 +24,7 @@ class ProxyController implements ControllerContract
      * @return string
     */
     public function proxy(Request $request):string {
-        return Helper::Json('test');
+        return flushString('test');
     }
     /**
      * manual health check
@@ -29,8 +32,8 @@ class ProxyController implements ControllerContract
      *
      * @return string
      */
-    public function health(Request $request):string {
-        return Helper::Json("ok");
+    public function health(Request $request,Response $response):string {
+        return flushJson($response,"ok");
     }
 
     /**
@@ -38,20 +41,20 @@ class ProxyController implements ControllerContract
      * @param Request $request
      * @return string
     */
-    public function instances(Request $request):string {
+    public function instances(Request $request,Response $response):string {
         $appId = $request->get("appId");
         $appId = strtolower($appId);
         $data = EurekaClient::once()->instance($appId);
-        return Helper::Plain($data);
+        return flushJson($response,$data);
     }
 
     /**
      * eureka info
      * @return string
     */
-    public function info(Request $request):string {
+    public function info(Request $request,Response $response):string {
         $data = Config::once()->getEurekaConfig()->getInstance();
         $data['leaseInfo']['lastRenewalTimestamp'] = apcu_fetch(EurekaClient::once()::LAST_RENEW_TIME);
-        return Helper::Json($data);
+        return flushJson($response,$data);
     }
 }

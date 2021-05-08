@@ -7,11 +7,10 @@ use Swoole\Http\Server;
 use Swoole\Timer;
 use SwooleSidecar\Concern\Singleton;
 use Swoole\Process;
-use SwooleSidecar\Config\ApolloConfig;
 use SwooleSidecar\Config\Config;
 use SwooleSidecar\Contract\ConfigCenterInterface;
+use SwooleSidecar\Logger\Logger;
 use SwooleSidecar\Request\Request;
-use SwooleSidecar\Helper\Helper;
 use SwooleSidecar\Response\Response;
 use Swoole\Coroutine\System;
 
@@ -20,34 +19,58 @@ class ApolloClient implements ConfigCenterInterface
     use Singleton;
 
     /**
-     * @var ApolloConfig
+     * @var array
      */
-    private $conf;
+    public $conf;
 
     /**
      * @var Request
      */
-    private $request;
+    public $request;
 
     /**
-     * @var boolean
+     * @var string
+    */
+    const TIMER_PROCESS_TITLE='SwooleSideCar-Apollo-Timer-Process';
+
+    /**
+     * @var string
      */
-    public $status = false;
+    const LISTEN_PROCESS_TITLE='SwooleSideCar-Apollo-Listen-Process';
+
+    /**
+     * @var array
+    */
+    private $notifications=[];
+    /**
+     * @var int
+    */
+    private $pullTimeout = 6;
+    /**
+     * @var int
+    */
+    private $holdTimeout = 65;
+    /**
+     * @var int
+    */
+    private $tickTimeout = 120000;
+
 
     /**
      * init apollo
      *
+     * @param Server $server
      * @return void
-    */
+     */
     public function init(Server $server){
-        $this->conf = Config::once()->getApolloConfig();
+        $this->conf = Config::apollo();
         $this->request = Request::once();
         $timer_process= new Process(function(){
-            Helper::setProcessTitle($this->conf->timer_process_title);
+            setProcessTitle(self::TIMER_PROCESS_TITLE);
             $this->Timer();
         });
         $long_pull_process = new Process(function(){
-            Helper::setProcessTitle($this->conf->listen_process_title);
+            setProcessTitle(self::LISTEN_PROCESS_TITLE);
             $this->Listen();
         });
         $long_pull_process->set(['enable_coroutine' => true]);
@@ -66,62 +89,35 @@ class ApolloClient implements ConfigCenterInterface
     /**
      * @inheritDoc
      */
-    public function pullWithCache(string $namespace, string $clientip): Response
+    public function pullWithCacheOrNot(string $namespace, string $releaseKey = ''): Response
     {
-        $appid       = $this->conf->appId;
-        $clusterName = $this->conf->clusterName;
-        $options['timeout']     = $this->conf->pullTimeout;
-        $options['host'] = $this->conf->host;
-        $options['port'] = $this->conf->port;
-
-        if (empty($clientIp)) {
-            $clientIp = $this->getServerIp();
-        }
-
-        $options['query']= [
-            'clientIp' => $clientIp
-        ];
-
-        $uri = sprintf('/configfiles/json/%s/%s/%s', $appid, $clusterName, $namespace);
-        return $this->request->get($uri, $options);
-    }
-
-    /**
-     * @inheritDoc
-     */
-    public function pullWithOutCache(string $namespace, string $releaseKey = '', string $clientip): Response
-    {
-        $appid       = $this->conf->appId;
-        $clusterName = $this->conf->clusterName;
-        $options['timeout']     = $this->conf->pullTimeout;
-        $options['host'] = $this->conf->host;
-        $options['port'] = $this->conf->port;
-
-        if (empty($clientIp)) {
-            $clientIp = $this->getServerIp();
-        }
+        $appId       = $this->conf['appId'];
+        $clusterName = $this->conf['clusterName'];
+        $options['timeout']     = $this->pullTimeout;
+        $options['host'] = $this->conf['host'];
+        $options['port'] = $this->conf['port'];
 
         // Client ip and release key
-        $query['clientIp'] = $clientIp;
+        $query['clientIp'] = $this->getServerIp();
         if (!empty($releaseKey)) {
             $query['releaseKey'] = $this->getReleaseKey($namespace);
         }
 
         $options['query'] = $query;
 
-        $uri = sprintf('/configs/%s/%s/%s', $appid, $clusterName, $namespace);
+        $uri = sprintf('/configs/%s/%s/%s', $appId, $clusterName, $namespace);
         return $this->request->get($uri, $options);
     }
 
     /**
      * @inheritDoc
      */
-    public function pullBatch(array $namespaces, string $clientip): array
+    public function pullBatch(array $namespaces): array
     {
         $requests = [];
         foreach ($namespaces as $namespace) {
-            $requests[$namespace] = function () use ($namespace, $clientip) {
-                return $this->pullWithOutCache($namespace, '', $clientip);
+            $requests[$namespace] = function () use ($namespace) {
+                return $this->pullWithCacheOrNot($namespace, '');
             };
         }
         return $this->request->requestBatch($requests);
@@ -132,56 +128,9 @@ class ApolloClient implements ConfigCenterInterface
      */
     public function Listen(): void
     {
-        $appid       = $this->conf->appId;
-        $clusterName = $this->conf->clusterName;
-        $options['host'] = $this->conf->host;
-        $options['port'] = $this->conf->port;
-        $namespaces = $this->conf->namespace;
-        $clientip = $this->conf->clientip;
-        $options['timeout'] = $this->conf->holdTimeout;
-        // Client ip and release key
-        $query['appId']   = $appid;
-        $query['cluster'] = $clusterName;
-        $this->status = true;//start to run
-
-        // Init $notifications
-        if (empty($this->conf->notifications)) {
-            foreach ($namespaces as $namespace) {
-                $this->conf->notifications[$namespace] = [
-                    'namespaceName'  => $namespace,
-                    'notificationId' => -1
-                ];
-            }
+        while(true){
+           $this->checkAndSave();
         }
-
-        // start Long poll
-        while ($this->status) {
-            $query['notifications'] = json_encode(array_values($this->conf->notifications));
-
-            $options['query'] = $query;
-            $result = $this->request->get('/notifications/v2', $options);
-            if (empty($result->getBody())||$result->getCode() == 304) {
-                continue;
-            }
-            $r = json_decode($result->getBody(),true);
-            $updateNamespaceNames = $notifications =  [];
-            foreach ($r as $nsNotification) {
-                $namespaceName  = $nsNotification['namespaceName'];
-                $notificationId = $nsNotification['notificationId'];
-
-                // Update notifications
-                $notifications[$namespaceName] = [
-                    'namespaceName'  => $namespaceName,
-                    'notificationId' => $notificationId
-                ];
-                $updateNamespaceNames[] = $namespaceName;
-            }
-            $this->conf->notifications = $notifications;
-            $updateConfigs = $this->pullBatch($updateNamespaceNames, $clientip);
-            //update file and cache
-            $this->updateFileAndCache($updateConfigs,'listen');
-        }
-        return;
     }
 
     /**
@@ -189,60 +138,68 @@ class ApolloClient implements ConfigCenterInterface
      */
     public function Timer(): void
     {
-        Timer::tick($this->conf->timer,function($timer_id){
-            $appid       = $this->conf->appId;
-            $clusterName = $this->conf->clusterName;
-            $options['host'] = $this->conf->host;
-            $options['port'] = $this->conf->port;
-            $namespaces = $this->conf->namespace;
-            $clientip = $this->conf->clientip;
-            $options['timeout'] = $this->conf->holdTimeout;
-
-            // Client ip and release key
-            $query['appId']   = $appid;
-            $query['cluster'] = $clusterName;
-
-            // Init $notifications
-            if (empty($this->conf->notifications)) {
-                foreach ($namespaces as $namespace) {
-                    $this->conf->notifications[$namespace] = [
-                        'namespaceName'  => $namespace,
-                        'notificationId' => -1
-                    ];
-                }
-            }
-
-            $query['notifications'] = json_encode(array_values($this->conf->notifications));
-
-            $options['query'] = $query;
-            $result = $this->request->get('/notifications/v2', $options);
-
-            if (empty($result->getBody())) {
-                return ;
-            }
-            $updateNamespaceNames = [];
-            $r = json_decode($result->getBody(),true);
-            foreach ($r as $nsNotification) {
-                $namespaceName  = $nsNotification['namespaceName'];
-                $notificationId = $nsNotification['notificationId'];
-
-                // Update notifications
-                $notifications[$namespaceName] = [
-                    'namespaceName'  => $namespaceName,
-                    'notificationId' => $notificationId
-                ];
-
-                $updateNamespaceNames[] = $namespaceName;
-            }
-            $this->conf->notifications = $notifications;
-            $updateConfigs = $this->pullBatch($updateNamespaceNames, $clientip);
-            //update file and cache
-            $this->updateFileAndCache($updateConfigs,"timer");
+        Timer::tick($this->tickTimeout,function(){
+            $this->checkAndSave();
         });
     }
 
     /**
+     * check update and save file
+     * @return bool
+     */
+    public function checkAndSave():bool{
+        $appId       = $this->conf['appId'];
+        $clusterName = $this->conf['clusterName'];
+        $options['host'] = $this->conf['host'];
+        $options['port'] = $this->conf['port'];
+        $namespaces = explode(',',$this->conf['namespaces']);
+        $options['timeout'] = $this->holdTimeout;
+        // Client ip and release key
+        $query['appId']   = $appId;
+        $query['cluster'] = $clusterName;
+
+        // Init $notifications
+        if (empty($this->notifications)) {
+            foreach ($namespaces as $namespace) {
+                $this->notifications[$namespace] = [
+                    'namespaceName'  => $namespace,
+                    'notificationId' => -1
+                ];
+            }
+        }
+
+        $query['notifications'] = json_encode(array_values($this->notifications));
+
+        $options['query'] = $query;
+        $result = $this->request->get('/notifications/v2', $options);
+        if (empty($result->getBody())||$result->getCode() == 304) {
+            return false;
+        }
+        $r = json_decode($result->getBody(),true);
+        $updateNamespaceNames = $notifications =  [];
+        foreach ($r as $nsNotification) {
+            $namespaceName  = $nsNotification['namespaceName'];
+            $notificationId = $nsNotification['notificationId'];
+
+            // Update notifications
+            $notifications[$namespaceName] = [
+                'namespaceName'  => $namespaceName,
+                'notificationId' => $notificationId
+            ];
+            $updateNamespaceNames[] = $namespaceName;
+        }
+        $this->notifications = $notifications;
+        $updateConfigs = $this->pullBatch($updateNamespaceNames);
+        //update file and cache
+        $this->updateFileAndCache($updateConfigs,'listen');
+        return true;
+    }
+
+    /**
      * set config to file
+     * @param string $namespaceName
+     * @param string $content
+     * @return bool
      */
     private function setConfigToFile(string $namespaceName,string $content):bool{
         $configFile = $this->getConfigPath($namespaceName);
@@ -260,14 +217,18 @@ class ApolloClient implements ConfigCenterInterface
 
     /**
      * get config path
+     * @param string $namespaceName
+     * @return string
      */
     private function getConfigPath(string $namespaceName):string{
-        return APOLLO_DIR.DIRECTORY_SEPARATOR.$this->conf->appId.'_'.
-            $this->conf->clusterName.'_apollo_cache_'.$namespaceName.'.json';
+        return APOLLO_DIR.DIRECTORY_SEPARATOR.$this->conf['appId'].'_'.
+            $this->conf['clusterName'].'_apollo_cache_'.$namespaceName.'.json';
     }
 
     /**
      * get config from file
+     * @param string $namespaceName
+     * @return array
      */
     private function getConfigFromFile(string $namespaceName):array{
         $file = $this->getConfigPath($namespaceName);
@@ -281,6 +242,8 @@ class ApolloClient implements ConfigCenterInterface
 
     /**
      * get releasekey
+     * @param string $namespace
+     * @return string
      */
     private function getReleaseKey(string $namespace):string{
         $releaseKey = '';
@@ -294,16 +257,33 @@ class ApolloClient implements ConfigCenterInterface
     /**
      * update file and cache
      * for cache pls use apcu store
+     * @param array $updateConfigs
+     * @param string $type
+     * @return void
      */
     private function updateFileAndCache(array $updateConfigs,string $type):void{
-        $res =[];
         foreach($updateConfigs as $key => $val){
             $res = json_decode($val->getBody(),true);
+            if(isset($res['status']) && $res['status'] ==404) continue;
             $fileRes = $this->setConfigToFile($res['namespaceName'],@json_encode($res['configurations']));
             $cacheRes = apcu_store($res['namespaceName'],$res['configurations']);
             $res[$res['namespaceName']]['file'] = $fileRes;
             $res[$res['namespaceName']]['cache'] = $cacheRes;
         }
-        Helper::getLogger()->info("{$type} process: update file and cache success ");
+        //for server type ,we dont need log
+        if($type !='server'){
+            Logger::once()->info("{$type} process: update file and cache success ");
+        }
+    }
+
+    /**
+     * check the update and fetch all config
+     * and save
+     * @param array $namespace
+     * @return void
+     */
+    public function fetchConfig(array $namespace):void{
+        $updateConfigs = $this->pullBatch($namespace,'');
+        $this->updateFileAndCache($updateConfigs,'server');
     }
 }

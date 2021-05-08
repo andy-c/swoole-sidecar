@@ -6,6 +6,7 @@ namespace SwooleSidecar\Event\SwooleEvent;
 use Swoole\Server;
 use SwooleSidecar\Helper\Helper;
 use SwooleSidecar\Config\Config;
+use SwooleSidecar\Logger\Logger;
 
 /**
  * swoole event
@@ -19,7 +20,7 @@ class SwooleEvent
     */
     public function onStart(Server $server){
           file_put_contents(PID_FILE,$server->master_pid,FILE_APPEND);
-          Helper::setProcessTitle(Config::once()->getServerConfig()->master_process_title);
+          setProcessTitle(Config::get('server')['master_process_title']);
     }
     /**
      * onManageStart
@@ -27,7 +28,7 @@ class SwooleEvent
     */
     public function onManagerStart(Server $server){
         file_put_contents(PID_FILE,','.$server->manager_pid,FILE_APPEND);
-        Helper::setProcessTitle(Config::once()->getServerConfig()->manage_process_title);
+        setProcessTitle(Config::get('server')['manage_process_title']);
     }
 
     /**
@@ -41,7 +42,7 @@ class SwooleEvent
         if (function_exists('apc_clear_cache')) {
             apc_clear_cache();
         }
-        Helper::setProcessTitle(Config::once()->getServerConfig()->worker_process_title);
+        setProcessTitle(Config::get('server')['worker_process_title']);
     }
     /**
      * onWorkerError
@@ -54,7 +55,7 @@ class SwooleEvent
             'exit_code'=>$exit_code,
             'signal' =>$signal
         ];
-        Helper::getLogger()->error("worker_error info :".json_encode($info));
+        Logger::once()->error("worker_error info :".json_encode($info));
     }
 
     /**
