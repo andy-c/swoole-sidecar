@@ -29,16 +29,22 @@ class Dispatcher
    */
    public function dispatch(Request $request,Response $response,GroupCountBased $dispatcher):void{
        try{
+           $context['traceId'] = $request->get['traceId'] ?? $this->generateTraceId();
+           $context['spanId'] =$request->get['spanId']?? "0";
+           $context['upSpan'] =$request->get['upSpan'] ?? '';
            $routeHandler= $this->matchRoute($request,$dispatcher);
+           $request->context = $context;
            if($routeHandler && is_callable($routeHandler)){
               $data = $routeHandler($request,$response);
+               $context['rt'] = microtime(true)-APP_START_TIME;
               //record request log
               Logger::once()->info(sprintf("server info %s,http packet %s, response data %s ",
                   json_encode($request->server),
                   json_encode($request->getData()),
                   $data
-              ));
-              $response->header('time',microtime(true)-APP_START_TIME);
+              ),$context);
+              $response->header('rt',$context['rt']);
+              $response->header('traceId',$context['traceId']);
            }
        }catch (RouteNotFoundException $ex){
            $response->status(405);
@@ -48,8 +54,8 @@ class Dispatcher
            $data = $ex->getMessage();
        }catch(Throwable $ex){
            $response->status(500);
-           $data = "server error";
-           Logger::once()->error("server error info ".$ex->getMessage());
+           $data = "server error:".$ex->getMessage();
+           Logger::once()->error("server error info ".$ex->getMessage(),$context);
        } finally {
            $response->end($data);
        }
@@ -76,6 +82,26 @@ class Dispatcher
        }else if($routerInfo[0] == GroupCountBased::NOT_FOUND){
            throw new RouteNotFoundException();
        }
+   }
+
+   /**
+    * generate id
+    * return string
+   */
+   private function generateTraceId():string {
+       if(function_exists(com_create_guid)){
+           $traceId = com_create_id();
+       }else{
+           $i           = mt_rand(1, 0x7FFFFF);
+           $traceId = sprintf(
+               "%08x%06x%04x%06x",
+               time() & 0xFFFFFFFF,
+               crc32(substr((string)gethostname(), 0, 256)) >> 8 & 0xFFFFFF,
+               getmypid() & 0xFFFF,
+               $i = $i > 0xFFFFFE ? 1 : $i + 1
+           );
+       }
+       return $traceId;
    }
 
 }

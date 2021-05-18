@@ -21,7 +21,8 @@ class Logger extends MLogger
      * @var string
      *
     */
-    private $log_format = '{"date": "%datetime%", "level": "%level_name%", "channel": "%channel%", "extra": "%extra%", "msg": {%message%}}' . "\n";
+    private $log_format = '{"date": "%datetime%", "level": "%level_name%", "channel": "%channel%", "extra": "%extra%", "msg": {%message%},"context":{%context%}}' . "\n";
+
     /**
      * logger init
      */
@@ -42,4 +43,5 @@ class Logger extends MLogger
             $this->pushHandler($stream);
         }
     }
+
 }
