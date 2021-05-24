@@ -29,6 +29,7 @@ class Dispatcher
    */
    public function dispatch(Request $request,Response $response,GroupCountBased $dispatcher):void{
        try{
+           $requestStarttime = microtime(true);
            $context['traceId'] = $request->get['traceId'] ?? $this->generateTraceId();
            $context['spanId'] =$request->get['spanId']?? "0";
            $context['upSpan'] =$request->get['upSpan'] ?? '';
@@ -36,7 +37,7 @@ class Dispatcher
            $request->context = $context;
            if($routeHandler && is_callable($routeHandler)){
               $data = $routeHandler($request,$response);
-               $context['rt'] = microtime(true)-APP_START_TIME;
+               $context['rt'] = microtime(true)-$requestStarttime;
               //record request log
               Logger::once()->info(sprintf("server info %s,http packet %s, response data %s ",
                   json_encode($request->server),
